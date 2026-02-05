@@ -10,24 +10,26 @@ import view.Affichage;
 
 import javax.swing.*;
 
-/** La classe principale de ce projet */
+/**
+ * Classe principale pour lancer le jeu
+ */
 public class Main {
-    /** La méthode de lancement du programme */
     public static void main(String [] args) {
-        JFrame maFenetre = new JFrame("Exercice 1");
+        // Création de la fenêtre et des composants
+        JFrame maFenetre = new JFrame("PC2i - CIRCLE");
         Position p = new Position();
-        // modèle : parcours
+        // Le parcours doit être créé avant les threads qui en ont besoin
         Parcours parcours = new Parcours(p);
-        // vue : affichage lié au modèle
+        // L'affichage doit être créé avant les threads qui en ont besoin
         Affichage a = new Affichage(p, parcours);
         maFenetre.add(a);
-        // threads : rafraîchissement et dynamique du modèle
+        // Création des threads
         new Raffraichir(a);
-        new Descendre(p, parcours); // Passer le parcours au constructeur
+        new Descendre(p, parcours);
         new Avancer(p, 1, parcours);
-        // fait défiler la ligne et notifie le parcours
-        // contrôleur : réaction au clic
-        new ReactionClic(a,p);
+        // Création du thread de réaction au clic et clavier (doit être créé après l'affichage et le parcours)
+        new ReactionClic(a, p, parcours);
+        // Configuration de la fenêtre
         maFenetre.pack();
         maFenetre.setResizable(false);
         maFenetre.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

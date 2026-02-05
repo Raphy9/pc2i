@@ -1,6 +1,6 @@
 package view;
 
-/** thread de la vue : rafraîchit périodiquement l'affichage. */
+/** Thread qui gère le rafraîchissement de l'affichage. */
 public class Raffraichir extends Thread {
 
     /** Délai entre deux rafraîchissements (en ms). */

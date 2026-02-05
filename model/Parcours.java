@@ -6,80 +6,103 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Générateur minimal de parcours (ligne brisée) pour l'exercice 4.
- * - deux premiers points ont la même Y que la position initiale
- * - Y entre HAUTEUR_MIN et HAUTEUR_MAX
- * - X croissant, premier point en -BEFORE, dernier au-delà d'AFTER
+ * Le parcours est défini par une liste de points (x, y) formant une ligne continue.
+ * La hauteur du parcours à une position x donnée est calculée par interpolation linéaire
+ * entre les deux points encadrant x.
+ *
+ * Le parcours est généré de manière procédurale, avec des segments de longueur aléatoire
+ * et des hauteurs aléatoires dans une bande définie pour éviter les extrêmes.
+ *
+ * Le parcours se réinitialise à chaque nouvelle partie, et s'adapte à l'avancement du joueur
+ * en ajoutant de nouveaux points au fur et à mesure que le joueur avance.
  */
 public class Parcours {
 
+    /** Les constantes définissent les paramètres de génération du parcours :
+     * - X_MIN et X_MAX définissent la longueur minimale et maximale des segments horizontaux
+     * - BAND_DIV définit la division de la hauteur pour créer une bande de génération
+     * - END_MARGIN définit une marge supplémentaire pour générer des points au-delà de la zone visible
+     * La génération du parcours utilise un objet Random pour créer des segments et des hauteurs variés,
+     * tout en respectant les contraintes définies par les constantes.
+     */
     private static final Random RNG = new Random();
-
-    // écart min/max en X entre deux points consécutifs (en unités modèles)
     public static final int X_MIN = 10;
     public static final int X_MAX = 40;
-
-    // Contrôle la bande verticale centrée
     private static final int BAND_DIV = 3;
+    private static final int END_MARGIN = 100;
 
+    /** La liste de points du parcours est protégée par une synchronisation pour garantir la cohérence
+     * lors de l'accès depuis différents threads (vue, contrôleur). La position du joueur est également
+     * utilisée pour adapter le parcours à l'avancement du joueur, en générant de nouveaux points au fur
+     * et à mesure que le joueur avance.
+     */
     private final ArrayList<Point> points = new ArrayList<>();
     private final Position position;
 
-    // marge pour générer un point supplémentaire devant la fenêtre
-    private static final int END_MARGIN = 100;
-
+    /** Le constructeur initialise le parcours en générant les points de départ, en fonction de la position initiale du joueur.
+     * Il utilise la méthode initPoints() pour créer une liste de points formant le parcours, en respectant les contraintes
+     * définies par les constantes et en adaptant les hauteurs à la position initiale du joueur.
+     */
     public Parcours(Position position) {
         this.position = position;
         initPoints();
     }
 
     /**
-     * Calcule et retourne la hauteur de la ligne à une abscisse absolue donnée
-     * par interpolation linéaire.
-     * @param xAbsolu La coordonnée X absolue.
-     * @return La hauteur Y correspondante sur la ligne.
+     * Réinitialise le parcours pour une nouvelle partie
+     */
+    public synchronized void reset() {
+        initPoints();
+    }
+
+    /** La méthode getHauteur(int xAbsolu) calcule la hauteur du parcours à une position x donnée en effectuant une interpolation linéaire
+     * entre les deux points encadrant x. Si x est en dehors de la plage des points, elle retourne la hauteur minimale du parcours.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
      */
     public synchronized int getHauteur(int xAbsolu) {
-        // Trouve le segment [p1, p2] qui contient xAbsolu
+       // On cherche les deux points encadrant xAbsolu
         for (int i = 0; i < points.size() - 1; i++) {
             Point p1 = points.get(i);
             Point p2 = points.get(i + 1);
-
+            // Si xAbsolu est entre p1.x et p2.x, on fait une interpolation linéaire pour trouver la hauteur correspondante
             if (xAbsolu >= p1.x && xAbsolu <= p2.x) {
-                // Interpolation linéaire pour trouver le y
                 double x1 = p1.x, y1 = p1.y;
                 double x2 = p2.x, y2 = p2.y;
-
-                if (x1 == x2) return (int) y1; // Segment vertical
-
+                // Si les deux points ont la même x (ce qui ne devrait pas arriver), on retourne simplement y1
+                if (x1 == x2) return (int) y1;
                 double hauteur = y1 + (xAbsolu - x1) * (y2 - y1) / (x2 - x1);
                 return (int) hauteur;
             }
         }
-        // Si on est en dehors du parcours généré, on retourne une valeur sûre.
         return Position.HAUTEUR_MIN;
     }
 
-
-    /** Initialisation complète de la liste de points. */
+    /** La méthode initPoints() génère les points du parcours de manière procédurale, en respectant les contraintes définies par les constantes.
+     * Elle crée une liste de points formant une ligne continue, avec des segments de longueur aléatoire et des hauteurs aléatoires dans une bande définie.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
+     */
     private void initPoints() {
         points.clear();
-        // premier point avant l'horizon
-        int x = -Position.BEFORE;
-        int y = position.getPosition();
-        points.add(new Point(x, y));
-        // deuxième point proche du premier, même hauteur
-        x += X_MIN;
-        points.add(new Point(x, y));
+        int demiHauteur = Position.HAUTEUR_OVALE / 2;
+        // Si on reset, position.getPosition() est remis à POS_DEPART (100)
+        int yDepart = position.getPosition() + demiHauteur;
 
-        int lastX = x;
-        // générer jusqu'à dépasser AFTER
+        // Point de départ avant la zone visible
+        int x = -Position.BEFORE;
+        points.add(new Point(x, yDepart));
+
+        // Point de sécurité pour éviter les obstacles trop proches du départ
+        int xSecurite = 50;
+        points.add(new Point(xSecurite, yDepart));
+
+        // Génération des points jusqu'à la fin de la zone visible + marge
+        int lastX = xSecurite;
         int totalRange = Position.HAUTEUR_MAX - Position.HAUTEUR_MIN;
-        // calculer la bande centrale selon BAND_DIV
         int minY = Position.HAUTEUR_MIN + totalRange / BAND_DIV;
         int maxY = Position.HAUTEUR_MIN + totalRange * (BAND_DIV - 1) / BAND_DIV;
         int spanY = Math.max(1, maxY - minY + 1);
 
+        // On génère des points jusqu'à la fin de la zone visible + marge
         while (lastX <= Position.AFTER + END_MARGIN) {
             int dx = X_MIN + RNG.nextInt(X_MAX - X_MIN + 1);
             lastX += dx;
@@ -88,52 +111,53 @@ public class Parcours {
         }
     }
 
-    /** Retourne une copie de la liste de points (X croissants) décalés par l'avancement. */
-    public synchronized List<Point> getPoints() {
-        int adv = position != null ? position.getAvancement() : 0;
-        List<Point> res = new ArrayList<>(points.size());
-        for (Point p : points) {
-            res.add(new Point(p.x - adv, p.y));
-        }
-        return res;
-    }
-
-    /**
-     * Mise à jour incrémentale de la liste lorsqu'on avance :
-     * - supprimer le 2ème point si il sortement laissé de la fenêtre
-     * - ajouter des points à droite si le dernier entre dans la fenêtre
+    /** La méthode getPoints() retourne une copie de la liste de points du parcours, avec les coordonnées x ajustées en fonction de l'avancement du joueur.
+     * Cela permet à la vue d'afficher le parcours de manière relative à la position du joueur, en décalant les points pour simuler le mouvement.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
      */
-    public synchronized void onAdvance() {
-        if (points.size() < 2) return;
-        int adv = position.getAvancement();
-        // vérifier le deuxième point (index 1)
-        Point second = points.get(1);
-        int secondXInView = second.x - adv;
-        if (secondXInView < -Position.BEFORE) {
-            // supprimer le premier point (on supprime l'élément 0)
-            points.remove(0);
-        }
-        // vérifier le dernier point et ajouter si nécessaire pour dépasser AFTER
-        int lastX = points.get(points.size() - 1).x;
-        int target = adv + Position.AFTER + END_MARGIN;
-        int totalRange = Position.HAUTEUR_MAX - Position.HAUTEUR_MIN;
-        int minY = Position.HAUTEUR_MIN + totalRange / BAND_DIV;
-        int maxY = Position.HAUTEUR_MIN + totalRange * (BAND_DIV - 1) / BAND_DIV;
-        int spanY = Math.max(1, maxY - minY + 1);
-        while (lastX < target) {
-            int dx = X_MIN + RNG.nextInt(X_MAX - X_MIN + 1);
-            lastX += dx;
-            int newY = minY + RNG.nextInt(spanY);
-            points.add(new Point(lastX, newY));
+    public List<Point> getPoints() {
+        // L'avancement du joueur est utilisé pour ajuster les coordonnées x des points, afin de simuler le mouvement du parcours par rapport au joueur.
+        int adv = position != null ? position.getAvancement() : 0;
+        synchronized (this) {
+            // On crée une nouvelle liste de points avec les coordonnées x ajustées en fonction de l'avancement du joueur
+            List<Point> res = new ArrayList<>(points.size());
+            for (Point p : points) {
+                res.add(new Point(p.x - adv, p.y));
+            }
+            return res;
         }
     }
 
-    /** Test rapide : affiche les points générés. */
-    public static void main(String[] args) {
-        Position p = new Position();
-        Parcours parc = new Parcours(p);
-        for (Point pt : parc.getPoints()) {
-            System.out.println(pt);
+    /** La méthode onAdvance() est appelée à chaque fois que le joueur avance, pour adapter le parcours en fonction de l'avancement du joueur.
+     * Elle supprime les points qui sont passés (dont la coordonnée x ajustée est inférieure à -Position.BEFORE) et génère de nouveaux points au-delà de la zone visible + marge.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
+     */
+    public void onAdvance() {
+        // L'avancement du joueur est utilisé pour ajuster les coordonnées x des points, afin de déterminer quels points sont passés et où générer de nouveaux points.
+        int adv = position.getAvancement();
+        synchronized (this) {
+            // On supprime les points qui sont passés (dont la coordonnée x ajustée est inférieure à -Position.BEFORE)
+            if (points.size() < 2) return;
+            Point second = points.get(1);
+            int secondXInView = second.x - adv;
+            // Tant que le deuxième point (le premier point restant) est passé, on supprime le premier point
+            if (secondXInView < -Position.BEFORE) {
+                points.remove(0);
+            }
+            // On génère de nouveaux points au-delà de la zone visible + marge
+            int lastX = points.get(points.size() - 1).x;
+            int target = adv + Position.AFTER + END_MARGIN;
+            int totalRange = Position.HAUTEUR_MAX - Position.HAUTEUR_MIN;
+            int minY = Position.HAUTEUR_MIN + totalRange / BAND_DIV;
+            int maxY = Position.HAUTEUR_MIN + totalRange * (BAND_DIV - 1) / BAND_DIV;
+            int spanY = Math.max(1, maxY - minY + 1);
+            // Tant que le dernier point généré est avant la cible (avancement + zone visible + marge), on génère un nouveau point
+            while (lastX < target) {
+                int dx = X_MIN + RNG.nextInt(X_MAX - X_MIN + 1);
+                lastX += dx;
+                int newY = minY + RNG.nextInt(spanY);
+                points.add(new Point(lastX, newY));
+            }
         }
     }
 }
