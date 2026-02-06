@@ -2,6 +2,7 @@ package model;
 
 import java.awt.Point;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -38,6 +39,7 @@ public class Parcours {
      */
     private final ArrayList<Point> points = new ArrayList<>();
     private final Position position;
+    private final ArrayList<Item> items = new ArrayList<>();
 
     /** Le constructeur initialise le parcours en générant les points de départ, en fonction de la position initiale du joueur.
      * Il utilise la méthode initPoints() pour créer une liste de points formant le parcours, en respectant les contraintes
@@ -52,7 +54,9 @@ public class Parcours {
      * Réinitialise le parcours pour une nouvelle partie
      */
     public synchronized void reset() {
+        points.clear();
         initPoints();
+        items.clear();
     }
 
     /** La méthode getHauteur(int xAbsolu) calcule la hauteur du parcours à une position x donnée en effectuant une interpolation linéaire
@@ -128,9 +132,30 @@ public class Parcours {
         }
     }
 
-    /** La méthode onAdvance() est appelée à chaque fois que le joueur avance, pour adapter le parcours en fonction de l'avancement du joueur.
-     * Elle supprime les points qui sont passés (dont la coordonnée x ajustée est inférieure à -Position.BEFORE) et génère de nouveaux points au-delà de la zone visible + marge.
+    /** La méthode getItems() retourne une liste des items présents sur le parcours, avec les coordonnées x ajustées en fonction de l'avancement du joueur.
+     * Seuls les items non ramassés sont retournés, et ils sont créés comme des objets temporaires pour l'affichage.
      * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
+     */
+    public List<Item> getItems() {
+        int adv = position != null ? position.getAvancement() : 0;
+        synchronized (this) {
+            List<Item> res = new ArrayList<>();
+            for (Item i : items) {
+                // On ne renvoie que les items non ramassés
+                if (!i.isRamasse()) {
+                    // On crée un item temporaire décalé pour l'affichage
+                    res.add(new Item(i.getX() - adv, i.getY(), i.getType()));
+                }
+            }
+            return res;
+        }
+    }
+
+    /** La méthode onAdvance() est appelée à chaque fois que le joueur avance, pour mettre à jour le parcours en fonction de l'avancement du joueur.
+     * Elle supprime les points qui sont passés (dont la coordonnée x ajustée est inférieure à -Position.BEFORE), et génère de nouveaux points au-delà de la zone visible + marge.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads, et que les modifications du parcours sont atomiques par
+     * rapport à l'avancement du joueur. Cette méthode est essentielle pour maintenir un parcours dynamique qui s'adapte à la progression du joueur, en assurant que le parcours
+     * reste cohérent et fluide au fur et à mesure que le joueur avance.
      */
     public void onAdvance() {
         // L'avancement du joueur est utilisé pour ajuster les coordonnées x des points, afin de déterminer quels points sont passés et où générer de nouveaux points.
@@ -144,6 +169,15 @@ public class Parcours {
             if (secondXInView < -Position.BEFORE) {
                 points.remove(0);
             }
+
+            Iterator<Item> it = items.iterator();
+            while (it.hasNext()) {
+                Item i = it.next();
+                if (i.getX() - adv < -Position.BEFORE) {
+                    it.remove();
+                }
+            }
+
             // On génère de nouveaux points au-delà de la zone visible + marge
             int lastX = points.get(points.size() - 1).x;
             int target = adv + Position.AFTER + END_MARGIN;
@@ -157,7 +191,21 @@ public class Parcours {
                 lastX += dx;
                 int newY = minY + RNG.nextInt(spanY);
                 points.add(new Point(lastX, newY));
+                if (RNG.nextDouble() < 0.3) { // 30% de chance d'avoir un item par segment
+                    Item.Type t = RNG.nextBoolean() ? Item.Type.PIECE : Item.Type.OBSTACLE;
+                    // On place l'item un peu au-dessus de la ligne (y - 30)
+                    items.add(new Item(lastX, newY - 30, t));
+                }
             }
         }
     }
+
+    /** La méthode getItemsReels() retourne la liste réelle des items du parcours, avec leurs coordonnées absolues (non ajustées).
+     * Cette méthode est principalement utilisée pour les tests, afin de vérifier l'état réel des items sur le parcours.
+     * La synchronisation garantit que les données du parcours sont cohérentes lors de l'accès depuis différents threads.
+     */
+    public synchronized List<Item> getItemsReels() {
+        return items;
+    }
+
 }

@@ -15,20 +15,28 @@ import javax.swing.*;
  */
 public class Main {
     public static void main(String [] args) {
-        // Création de la fenêtre et des composants
         JFrame maFenetre = new JFrame("PC2i - CIRCLE");
         Position p = new Position();
-        // Le parcours doit être créé avant les threads qui en ont besoin
         Parcours parcours = new Parcours(p);
-        // L'affichage doit être créé avant les threads qui en ont besoin
-        Affichage a = new Affichage(p, parcours);
+
+        // Création du Monde Décor
+        model.MondeDecor decor = new model.MondeDecor(view.Affichage.VIEW_ZONE_X, view.Affichage.VIEW_ZONE_Y);
+
+        // On passe le decor à l'affichage
+        Affichage a = new Affichage(p, parcours, decor);
         maFenetre.add(a);
-        // Création des threads
+
+        // Lancement des Threads
         new Raffraichir(a);
         new Descendre(p, parcours);
         new Avancer(p, 1, parcours);
-        // Création du thread de réaction au clic et clavier (doit être créé après l'affichage et le parcours)
+        new view.AnimChoc(p, a);
+
+        // Lancement du thread décor
+        new model.AnimateurDecor(decor);
+
         new ReactionClic(a, p, parcours);
+
         // Configuration de la fenêtre
         maFenetre.pack();
         maFenetre.setResizable(false);

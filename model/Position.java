@@ -52,6 +52,7 @@ public class Position {
     private int hauteur = POS_DEPART;
     private boolean gameOver = false;
     private int avancement = 0;
+    private int scoreSupplementaire = 0;
 
     /** --- GESTION DE L'ÉTAT GLOBAL (Menu/Jeu) ---
      * Ces méthodes permettent de gérer l'état global du jeu, qui influence
@@ -79,6 +80,7 @@ public class Position {
         this.gameOver = false;
         this.tempsDernierChoc = 0;
         this.etatCurrent = Etat.JEU;
+        this.scoreSupplementaire = 0;
     }
 
     /** --- GETTERS (Safe) ---
@@ -101,6 +103,10 @@ public class Position {
 
     public synchronized int getVies() {
         return vies;
+    }
+
+    public synchronized int getScoreTotal() {
+        return avancement + scoreSupplementaire;
     }
 
     /** La méthode jump() permet au joueur de sauter, en augmentant sa hauteur.
@@ -214,6 +220,62 @@ public class Position {
             if (this.hauteur < HAUTEUR_MIN) this.hauteur = HAUTEUR_MIN;
             if (this.hauteur > HAUTEUR_MAX - HAUTEUR_OVALE) {
                 this.hauteur = HAUTEUR_MAX - HAUTEUR_OVALE;
+            }
+        }
+    }
+
+    /** La méthode checkItems vérifie si le joueur est en train de ramasser un item (bonus ou malus) sur le parcours.
+     * Elle calcule la distance entre le joueur et les items du parcours, et applique les effets des items ramassés.
+     * Les items ramassés sont marqués pour ne pas être ramassés à nouveau.
+     * La méthode est synchronisée pour garantir la cohérence des données lors de l'accès
+     * depuis différents threads (vue, contrôleur).
+     */
+    public synchronized void checkItems(Parcours parcours) {
+        if (etatCurrent != Etat.JEU || gameOver) return;
+
+        // 1. Coordonnées du CENTRE du joueur (Unités Modèle)
+        int joueurX = this.avancement + BEFORE;
+        int joueurY = this.hauteur + (HAUTEUR_OVALE / 2);
+
+        // 2. Seuils de ramassage (en unités modèle)
+        int seuilX = 7;
+        int seuilY = 30;
+
+        // 3. Vérification de chaque item du parcours
+        for (Item item : parcours.getItemsReels()) {
+            if (!item.isRamasse()) {
+                // Calcul des écarts absolus
+                int dx = Math.abs(item.getX() - joueurX);
+                int dy = Math.abs(item.getY() - joueurY);
+
+                // Si on est assez proche en X ET en Y, c'est touché
+                if (dx < seuilX && dy < seuilY) {
+                    item.setRamasse(true);
+                    appliquerEffetItem(item);
+                }
+            }
+        }
+    }
+
+    /** La méthode appliquerEffetItem applique les effets d'un item ramassé par le joueur.
+     * Si l'item est un bonus (PIECE), il augmente le score du joueur.
+     * Si l'item est un malus (OBSTACLE), il agit comme une collision normale, en faisant perdre une vie au joueur.
+     * La méthode est synchronisée pour garantir la cohérence des données lors de l'accès
+     * depuis différents threads (vue, contrôleur).
+     */
+    private void appliquerEffetItem(Item item) {
+        if (item.getType() == Item.Type.PIECE) {
+            // BONUS : Augmente le score
+            scoreSupplementaire += 50;
+        } else if (item.getType() == Item.Type.OBSTACLE) {
+            // MALUS : Comme une collision normale
+            if (!estInvulnerable()) {
+                vies--;
+                tempsDernierChoc = System.currentTimeMillis(); // Invulnérabilité
+                if (vies <= 0) {
+                    vies = 0;
+                    gameOver = true;
+                }
             }
         }
     }

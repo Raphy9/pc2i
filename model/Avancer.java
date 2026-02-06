@@ -2,6 +2,10 @@ package model;
 
 /**
  * Thread qui gère l'avancement du personnage (défilement du parcours)
+ * L'avancement est simulé en avançant le personnage à chaque itération de la boucle, ce qui donne l'impression que le parcours défile.
+ * Ce thread est également responsable de vérifier les collisions avec les éléments du parcours (lignes,
+ * obstacles, pièces) et de notifier le parcours de l'avancement pour mettre à jour les éléments du décor.
+ * Le thread s'arrête lorsque le personnage est en game over ou lorsque le jeu est réinitialisé.
  */
 public class Avancer extends Thread {
 
@@ -37,10 +41,14 @@ public class Avancer extends Thread {
 
             // Si un parcours est associé, on vérifie les collisions et on notifie le parcours de l'avancement
             if (parcours != null) {
-                // Si collision, on demande à Position de gérer (perte de vie ou fin)
+                // Vérification collision Ligne (Existant)
                 if (position.checkCollision(parcours)) {
                     position.gererCollision(parcours);
                 }
+
+                // Vérification collision Item (Existant)
+                position.checkItems(parcours);
+
                 parcours.onAdvance();
             }
             // On notifie le parcours que le personnage a avancé, pour mettre à jour les éléments du parcours
